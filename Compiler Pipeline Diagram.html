@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ALA Tensor Core MVP — Pipeline</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f0f11;
+      color: #e2e0d8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 24px;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      color: #a8a4c0;
+      margin-bottom: 6px;
+      text-align: center;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #5a5870;
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    svg {
+      width: 100%;
+      max-width: 820px;
+      height: auto;
+    }
+
+    /* Color ramps matching the system */
+    .c-purple rect  { fill: #1e1b38; stroke: #534AB7; }
+    .c-purple text  { fill: #AFA9EC; }
+    .c-teal   rect  { fill: #0a1f18; stroke: #0F6E56; }
+    .c-teal   text  { fill: #5DCAA5; }
+    .c-coral  rect  { fill: #1f100a; stroke: #993C1D; }
+    .c-coral  text  { fill: #F0997B; }
+    .c-gray   rect  { fill: #1a1a1c; stroke: #5F5E5A; }
+    .c-gray   text  { fill: #B4B2A9; }
+
+    .th { font-weight: 500; font-size: 14px; }
+    .ts { font-weight: 400; font-size: 12px; }
+
+    .arr {
+      stroke: #5a5870;
+      stroke-width: 1.5;
+      fill: none;
+    }
+
+    .node { cursor: pointer; }
+    .node:hover rect { opacity: 0.85; }
+
+    /* Tooltip */
+    #tooltip {
+      position: fixed;
+      background: #1e1b38;
+      border: 1px solid #534AB7;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #AFA9EC;
+      max-width: 280px;
+      line-height: 1.5;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 100;
+    }
+    #tooltip.visible { opacity: 1; }
+
+    footer {
+      margin-top: 32px;
+      font-size: 12px;
+      color: #3a3850;
+    }
+  </style>
+</head>
+<body>
+
+<h1>ALA Tensor Core MVP</h1>
+<p class="subtitle">Arabic Language Architecture — compiler pipeline</p>
+
+<svg viewBox="0 0 680 740" role="img" xmlns="http://www.w3.org/2000/svg">
+  <title>ALA Tensor Core MVP — pipeline diagram</title>
+  <desc>Three-stage pipeline: Frontend parses Arabic source into flat coordinates, Assembler encodes them into a binary file, Backend loads and executes the binary on a virtual CPU.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M2 1L8 5L2 9" fill="none" stroke="#5a5870" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <!-- ── STAGE 1: FRONTEND ── -->
+  <g class="c-purple">
+    <rect x="30" y="20" width="620" height="185" rx="12" stroke-width="0.5"/>
+    <text class="th" x="340" y="46" text-anchor="middle">Stage 1 — Frontend compiler</text>
+    <text class="ts" x="340" y="62" text-anchor="middle">Parses Arabic source text into numeric coordinates</text>
+  </g>
+
+  <g class="node c-gray" data-tip="The sentence must end with a period. It is then split into individual Arabic words by whitespace. A single-word sentence like 'اخرج.' (root: خرج, index 0) produces a HALT_OP.">
+    <rect x="46" y="76" width="118" height="56" rx="8" stroke-width="0.5"/>
+    <text class="th" x="105" y="98" text-anchor="middle" dominant-baseline="central">Input</text>
+    <text class="ts" x="105" y="116" text-anchor="middle" dominant-baseline="central">Arabic sentence + "."</text>
+  </g>
+
+  <line x1="164" y1="104" x2="188" y2="104" class="arr" marker-end="url(#arrow)"/>
+
+  <g class="node c-purple" data-tip="Strips the terminal period and splits the sentence on whitespace. No NLP — just a boundary check and .split().">
+    <rect x="188" y="76" width="118" height="56" rx="8" stroke-width="0.5"/>
+    <text class="th" x="247" y="98" text-anchor="middle" dominant-baseline="central">Tokenize</text>
+    <text class="ts" x="247" y="116" text-anchor="middle" dominant-baseline="central">Split words, strip "."</text>
+  </g>
+
+  <line x1="306" y1="104" x2="330" y2="104" class="arr" marker-end="url(#arrow)"/>
+
+  <g class="node c-purple" data-tip="Each word is tested against 5 regex patterns (افعل، فعل، مفعل، فاعل، فعيلة). The 3 root consonants are extracted as capture groups and looked up in the root dictionary.">
+    <rect x="330" y="76" width="118" height="56" rx="8" stroke-width="0.5"/>
+    <text class="th" x="389" y="98" text-anchor="middle" dominant-baseline="central">Pattern match</text>
+    <text class="ts" x="389" y="116" text-anchor="middle" dominant-baseline="central">Root + template → IDs</text>
+  </g>
+
+  <line x1="448" y1="104" x2="472" y2="104" class="arr" marker-end="url(#arrow)"/>
+
+  <g class="node c-purple" data-tip="flat = (root_idx × 15 × 4) + (template_id × 4) + delta. Each word becomes a single integer in a 15,000-point space.">
+    <rect x="472" y="76" width="160" height="56" rx="8" stroke-width="0.5"/>
+    <text class="th" x="552" y="98" text-anchor="middle" dominant-baseline="central">Encode coordinate</text>
+    <text class="ts" x="552" y="116" text-anchor="middle" dominant-baseline="central">root×60 + template×4 + delta</text>
+  </g>
+
+  <g class="node c-gray" data-tip="The tuple of delta values across all words determines the instruction type. (3,) = HALT. (3,0,0) = THREE_OP. (3,0,0,0,0) = COND_BRANCH.">
+    <rect x="188" y="155" width="444" height="36" rx="8" stroke-width="0.5"/>
+    <text class="th" x="270" y="173" dominant-baseline="central">Sentence signature</text>
+    <text class="ts" x="430" y="173" dominant-baseline="central">delta pattern → HALT_OP / THREE_OP / COND_BRANCH</text>
+  </g>
+
+  <text class="ts" fill="#5a5870" x="340" y="224" text-anchor="middle">Output: list of {operation_type, rank_n, active_coordinates}</text>
+
+  <line x1="340" y1="228" x2="340" y2="258" class="arr" marker-end="url(#arrow)" stroke-width="1.5"/>
+
+  <!-- ── STAGE 2: ASSEMBLER ── -->
+  <g class="c-teal">
+    <rect x="30" y="262" width="620" height="160" rx="12" stroke-width="0.5"/>
+    <text class="th" x="340" y="288" text-anchor="middle">Stage 2 — Assembler &amp; loader</text>
+    <text class="ts" x="340" y="304" text-anchor="middle">Converts coordinates to a binary file, then reads it back</text>
+  </g>
+
+  <g class="node c-teal" data-tip="Uses Python struct.pack. Each instruction: 1 byte opcode + 1 byte rank_n + (rank_n × 2) bytes for the coordinates as 16-bit unsigned shorts.">
+    <rect x="46" y="318" width="170" height="56" rx="8" stroke-width="0.5"/>
+    <text class="th" x="131" y="340" text-anchor="middle" dominant-baseline="central">Pack to binary</text>
+    <text class="ts" x="131" y="358" text-anchor="middle" dominant-baseline="central">1B opcode + 1B rank + 2B×N coords</text>
+  </g>
+
+  <line x1="216" y1="346" x2="250" y2="346" class="arr" marker-end="url(#arrow)"/>
+
+  <g class="node c-gray" data-tip="A real .bin file written to disk. Nothing Python-specific — pure bytes readable by any language.">
+    <rect x="250" y="318" width="140" height="56" rx="8" stroke-width="0.5"/>
+    <text class="th" x="320" y="340" text-anchor="middle" dominant-baseline="central">Binary file</text>
+    <text class="ts" x="320" y="358" text-anchor="middle" dominant-baseline="central">ala_firmware.bin on disk</text>
+  </g>
+
+  <line x1="390" y1="346" x2="424" y2="346" class="arr" marker-end="url(#arrow)"/>
+
+  <g class="node c-teal" data-tip="Reads the .bin file 2 bytes at a time (header), then reads rank_n × 2 bytes for the coordinates. Rebuilds the same Python dict the frontend produced.">
+    <rect x="424" y="318" width="200" height="56" rx="8" stroke-width="0.5"/>
+    <text class="th" x="524" y="340" text-anchor="middle" dominant-baseline="central">Unpack (loader)</text>
+    <text class="ts" x="524" y="358" text-anchor="middle" dominant-baseline="central">Read bytes → rebuild instruction list</text>
+  </g>
+
+  <text class="ts" fill="#5a5870" x="340" y="408" text-anchor="middle">Same data structure as stage 1 output — binary was the only thing in between</text>
+
+  <line x1="340" y1="424" x2="340" y2="454" class="arr" marker-end="url(#arrow)" stroke-width="1.5"/>
+
+  <!-- ── STAGE 3: BACKEND ── -->
+  <g class="c-coral">
+    <rect x="30" y="458" width="620" height="250" rx="12" stroke-width="0.5"/>
+    <text class="th" x="340" y="484" text-anchor="middle">Stage 3 — Virtual backend CPU</text>
+    <text class="ts" x="340" y="500" text-anchor="middle">Executes instructions against static RAM (250 slots)</text>
+  </g>
+
+  <g class="node c-gray" data-tip="PC = program counter (current instruction index). Z_FLAG = set to 1 when a compared register is zero, used by COND_BRANCH to decide whether to jump. RAM = 250-slot integer array.">
+    <rect x="46" y="514" width="148" height="96" rx="8" stroke-width="0.5"/>
+    <text class="th" x="120" y="534" text-anchor="middle" dominant-baseline="central">Registers</text>
+    <text class="ts" x="120" y="554" text-anchor="middle" dominant-baseline="central">PC — program counter</text>
+    <text class="ts" x="120" y="572" text-anchor="middle" dominant-baseline="central">Z_FLAG — zero flag</text>
+    <text class="ts" x="120" y="590" text-anchor="middle" dominant-baseline="central">RAM[250] — static memory</text>
+  </g>
+
+  <g class="node c-coral" data-tip="Reverses the encoding: root_idx = flat ÷ 60, template_id = remainder ÷ 4, delta = remainder % 4. O(1) — no loops.">
+    <rect x="218" y="514" width="148" height="96" rx="8" stroke-width="0.5"/>
+    <text class="th" x="292" y="534" text-anchor="middle" dominant-baseline="central">Decode coordinate</text>
+    <text class="ts" x="292" y="554" text-anchor="middle" dominant-baseline="central">flat ÷ 60 → root_idx</text>
+    <text class="ts" x="292" y="572" text-anchor="middle" dominant-baseline="central">remainder ÷ 4 → template</text>
+    <text class="ts" x="292" y="590" text-anchor="middle" dominant-baseline="central">remainder % 4 → delta</text>
+  </g>
+
+  <g class="node c-coral" data-tip="The verb root IS the opcode. root 1 (نقل) = MOV. root 2 (جمع) = ADD. root 3 (نقص) = SUB. root 4 (عدل) = CMP. root 7 (ذهب) = JMP. root 11 (طلق) = unimplemented in current MVP.">
+    <rect x="390" y="514" width="234" height="96" rx="8" stroke-width="0.5"/>
+    <text class="th" x="507" y="534" text-anchor="middle" dominant-baseline="central">Linguistic ALU</text>
+    <text class="ts" x="507" y="554" text-anchor="middle" dominant-baseline="central">root 1 → MOV (copy register)</text>
+    <text class="ts" x="507" y="572" text-anchor="middle" dominant-baseline="central">root 2/3 → ADD / SUB</text>
+    <text class="ts" x="507" y="590" text-anchor="middle" dominant-baseline="central">root 4 → CMP   root 7 → JMP</text>
+  </g>
+
+  <line x1="194" y1="562" x2="218" y2="562" class="arr" marker-end="url(#arrow)"/>
+  <line x1="366" y1="562" x2="390" y2="562" class="arr" marker-end="url(#arrow)"/>
+
+  <g class="node c-gray" data-tip="In COND_BRANCH instructions, the first 2 words carry no hardware operation. They make the sentence grammatically correct in Arabic. The backend reads only coords[2..4].">
+    <rect x="46" y="632" width="580" height="44" rx="8" stroke-width="0.5"/>
+    <text class="th" x="176" y="654" dominant-baseline="central">Structural padding</text>
+    <text class="ts" x="390" y="654" dominant-baseline="central">Some word slots carry no operation — they make the sentence grammatical in Arabic</text>
+  </g>
+
+  <text class="ts" fill="#5a5870" x="340" y="718" text-anchor="middle">Execution loops until root 0 (خرج) produces HALT_OP — the backend sets halted = true and stops the CPU</text>
+</svg>
+
+<div id="tooltip"></div>
+
+<footer>ALA Tensor Core MVP · Ahmed Hamed Ahmed Obidalla</footer>
+
+<script>
+  const tooltip = document.getElementById('tooltip');
+  let hideTimer;
+
+  document.querySelectorAll('[data-tip]').forEach(el => {
+    el.addEventListener('mouseenter', e => {
+      clearTimeout(hideTimer);
+      tooltip.textContent = el.dataset.tip;
+      tooltip.classList.add('visible');
+    });
+    el.addEventListener('mousemove', e => {
+      tooltip.style.left = (e.clientX + 14) + 'px';
+      tooltip.style.top  = (e.clientY + 14) + 'px';
+    });
+    el.addEventListener('mouseleave', () => {
+      hideTimer = setTimeout(() => tooltip.classList.remove('visible'), 120);
+    });
+  });
+</script>
+</body>
+</html>
